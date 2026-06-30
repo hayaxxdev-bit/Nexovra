@@ -1,0 +1,192 @@
+erDiagram
+    profiles ||--o| settings : "has"
+    profiles ||--o{ accounts : "has"
+    profiles ||--o{ categories : "has"
+    profiles ||--o{ transactions : "has"
+    profiles ||--o{ attachments : "has"
+    profiles ||--o{ journals : "has"
+    profiles ||--o{ daily_notes : "has"
+    profiles ||--o{ todos : "has"
+    profiles ||--o{ reminders : "has"
+    profiles ||--o{ activity_logs : "has"
+    
+    account_types ||--o{ accounts : "defines"
+    
+    accounts ||--o{ transactions : "source"
+    accounts ||--o{ transactions : "destination"
+    
+    categories ||--o{ categories : "parent"
+    categories ||--o{ transactions : "has"
+    categories ||--o{ transaction_details : "has"
+    
+    transactions ||--o{ transaction_details : "has"
+    transactions ||--o{ attachments : "has"
+    transactions ||--o{ reminders : "has"
+    
+    journals ||--o{ reminders : "has"
+    todos ||--o{ reminders : "has"
+
+    profiles {
+        uuid id PK
+        varchar full_name
+        text avatar_url
+        varchar phone
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    settings {
+        uuid id PK
+        uuid user_id FK
+        varchar currency
+        varchar currency_symbol
+        varchar date_format
+        varchar theme
+        varchar language
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    account_types {
+        smallint id PK
+        varchar name
+        varchar icon
+        boolean is_default
+    }
+    
+    accounts {
+        uuid id PK
+        uuid user_id FK
+        smallint account_type_id FK
+        varchar name
+        text description
+        numeric initial_balance
+        numeric current_balance
+        varchar currency
+        varchar color
+        varchar icon
+        boolean is_active
+        boolean is_default
+        integer sort_order
+        text notes
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    categories {
+        uuid id PK
+        uuid user_id FK
+        varchar name
+        varchar type
+        varchar color
+        varchar icon
+        uuid parent_id FK
+        boolean is_active
+        integer sort_order
+        timestamptz created_at
+    }
+    
+    transactions {
+        uuid id PK
+        uuid user_id FK
+        varchar transaction_number UK
+        varchar type
+        varchar status
+        varchar name
+        numeric amount
+        uuid account_id FK
+        uuid to_account_id FK
+        uuid category_id FK
+        varchar payment_method
+        date transaction_date
+        text notes
+        varchar reference_number
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    transaction_details {
+        uuid id PK
+        uuid transaction_id FK
+        uuid category_id FK
+        varchar description
+        numeric amount
+        text notes
+    }
+    
+    attachments {
+        uuid id PK
+        uuid user_id FK
+        varchar entity_type
+        uuid entity_id
+        varchar file_name
+        text file_url
+        varchar file_type
+        integer file_size
+        timestamptz created_at
+    }
+    
+    journals {
+        uuid id PK
+        uuid user_id FK
+        date journal_date
+        varchar title
+        text content
+        varchar mood
+        text[] tags
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    daily_notes {
+        uuid id PK
+        uuid user_id FK
+        date note_date
+        text target
+        text agenda
+        text notes
+        varchar priority
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    todos {
+        uuid id PK
+        uuid user_id FK
+        varchar title
+        text description
+        varchar status
+        varchar priority
+        date due_date
+        time due_time
+        date todo_date
+        integer progress
+        text[] tags
+        boolean is_pinned
+        timestamptz completed_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    reminders {
+        uuid id PK
+        uuid user_id FK
+        varchar entity_type
+        uuid entity_id
+        varchar title
+        timestamptz remind_at
+        boolean is_sent
+        boolean is_dismissed
+        timestamptz created_at
+    }
+    
+    activity_logs {
+        uuid id PK
+        uuid user_id FK
+        varchar action
+        varchar entity_type
+        uuid entity_id
+        text description
+        jsonb metadata
+        timestamptz created_at
+    }

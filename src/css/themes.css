@@ -1,0 +1,13 @@
+:root {
+  /* Light theme (default) */
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #e5e7eb;
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 72px;
+  --navbar-height: 64px;
+}
+
+.dark {
+  --sidebar-bg: #0f172a;
+  --sidebar-border: #1e293b;
+}
