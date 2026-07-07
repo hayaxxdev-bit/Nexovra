@@ -16,6 +16,7 @@ export default defineConfig({
       '@css': path.resolve(__dirname, './src/css'),
       '@components': path.resolve(__dirname, './src/js/components'),
       '@services': path.resolve(__dirname, './src/js/services'),
+      '@utils': path.resolve(__dirname, './src/js/utils'),
       '@pages': path.resolve(__dirname, './src/js/pages'),
       '@core': path.resolve(__dirname, './src/js/core'),
     }
