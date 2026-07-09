@@ -1,0 +1,9 @@
+{
+  "appId": "com.nexovra.app",
+  "appName": "Nexovra",
+  "webDir": "dist",
+  "server": {
+    "url": "https://nexovra-mu.vercel.app",
+    "cleartext": true
+  }
+}
