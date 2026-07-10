@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /$
+Allow: /login
+Allow: /register
+Allow: /sitemap.xml
+Allow: /landing.html
+Disallow: /dashboard
+Disallow: /accounts
+Disallow: /transactions
+Disallow: /transfer
+Disallow: /cashbook
+Disallow: /planner
+Disallow: /reports
+Disallow: /settings
+Disallow: /api/
+
+Sitemap: https://nexovra-mu.vercel.app/sitemap.xml

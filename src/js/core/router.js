@@ -116,41 +116,54 @@ export class Router {
    * Handle route matching and rendering
    * @param {string} pathname
    */
-  async _handleRoute(pathname) {
-    // Cek maintenance mode
-    if (this._isMaintenanceMode() && !pathname.startsWith('/maintenance')) {
-      return this._renderErrorPage('maintenance')
-    }
+async _handleRoute(pathname) {
+  // Cek maintenance mode
+  if (this._isMaintenanceMode() && !pathname.startsWith('/maintenance')) {
+    return this._renderErrorPage('maintenance')
+  }
 
-    // Find matching route
-    let matchedRoute = null
-    let matchedParams = {}
+  // Find matching route
+  let matchedRoute = null
+  let matchedParams = {}
 
-    for (const [path, route] of this._routes) {
-      const match = pathname.match(route.pattern)
-      if (match) {
-        matchedRoute = route
-        const paramNames = [...path.matchAll(/:(\w+)/g)].map(m => m[1])
-        paramNames.forEach((name, i) => {
-          matchedParams[name] = match[i + 1]
-        })
-        break
-      }
+  for (const [path, route] of this._routes) {
+    const match = pathname.match(route.pattern)
+    if (match) {
+      matchedRoute = route
+      const paramNames = [...path.matchAll(/:(\w+)/g)].map(m => m[1])
+      paramNames.forEach((name, i) => {
+        matchedParams[name] = match[i + 1]
+      })
+      break
     }
+  }
 
-    // Handle 404 - No route found
-    if (!matchedRoute) {
-      // Cek apakah ini halaman error
-      if (pathname === '/404') {
-        return this._renderErrorPage('404')
-      }
-      
-      // Redirect ke 404 atau fallback
-      if (this._fallback === '/404') {
-        return this.navigate('/404', true)
-      }
-      return this.navigate(this._fallback, true)
+  // Handle 404 - No route found
+  if (!matchedRoute) {
+    console.warn(`⚠️ No route found for: ${pathname}`)
+    
+    // Emit route not found event
+    window.__app?.events?.emit('route:notfound', { path: pathname })
+    
+    // Cek apakah ini halaman error yang valid
+    if (pathname === '/404' || pathname === '/error/500' || pathname === '/maintenance') {
+      const errorType = pathname === '/404' ? '404' : 
+                       pathname === '/maintenance' ? 'maintenance' : 'error'
+      return this._renderErrorPage(errorType)
     }
+    
+    // Redirect ke 404 atau fallback
+    const target = this._fallback === '/404' ? '/404' : this._fallback
+    
+    // Hindari redirect loop
+    if (pathname === target) {
+      console.error('❌ Redirect loop detected, rendering fallback error')
+      return this._renderErrorPage('404')
+    }
+    
+    // Gunakan replace untuk mencegah build-up history
+    return this.navigate(target, true)
+  }
 
     // Check auth for protected routes
     if (matchedRoute.options.protected) {

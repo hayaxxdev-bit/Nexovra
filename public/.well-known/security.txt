@@ -1,0 +1,4 @@
+Contact: mailto:admin@nexovra.vercel.app
+Expires: 2027-12-31T23:59:59Z
+Preferred-Languages: id, en
+Canonical: https://nexovra-mu.vercel.app/.well-known/security.txt

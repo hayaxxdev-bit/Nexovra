@@ -5,8 +5,10 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
-    'Missing Supabase environment variables.\n' +
-    'Please create a .env file with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.\n' +
+    '❌ Missing Supabase environment variables.\n' +
+    'Please create a .env file with:\n' +
+    '  VITE_SUPABASE_URL=your-project-url\n' +
+    '  VITE_SUPABASE_ANON_KEY=your-anon-key\n' +
     'See .env.example for reference.'
   )
 }
@@ -16,44 +18,125 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    flowType: 'pkce',
+    storage: window.localStorage,
+    storageKey: 'nexovra_auth',
   },
   db: {
     schema: 'public',
   },
   global: {
     headers: {
-      'x-application-name': 'financeos',
+      'x-application-name': 'nexovra',
+      'x-client-info': 'nexovra-app',
+      'x-app-version': '1.0.0',
       'Accept': 'application/json',
       'Content-Type': 'application/json',
     },
   },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
 })
 
+// ============================================================
+// Auth Helpers
+// ============================================================
+
 /**
- * Handle Supabase errors with user-friendly messages
+ * Get current session
+ */
+export const getSession = async () => {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) throw error
+    return session
+  } catch (error) {
+    console.error('Failed to get session:', error)
+    return null
+  }
+}
+
+/**
+ * Get current user
+ */
+export const getCurrentUser = async () => {
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error) throw error
+    return user
+  } catch (error) {
+    console.error('Failed to get user:', error)
+    return null
+  }
+}
+
+/**
+ * Check if user is authenticated
+ */
+export const isAuthenticated = async () => {
+  const session = await getSession()
+  return !!session
+}
+
+/**
+ * Refresh session
+ */
+export const refreshSession = async () => {
+  try {
+    const { data: { session }, error } = await supabase.auth.refreshSession()
+    if (error) throw error
+    return session
+  } catch (error) {
+    console.error('Failed to refresh session:', error)
+    return null
+  }
+}
+
+// ============================================================
+// Error Handler
+// ============================================================
+
+/**
+ * Handle Supabase errors with user-friendly Indonesian messages
  */
 export function handleSupabaseError(error) {
-  if (!error) return 'Terjadi kesalahan tidak diketahui'
+  if (!error) return 'Terjadi kesalahan tidak diketahui.'
 
   const message = error.message || ''
   const code = error.code || ''
-
-  // Rate limiting
-  if (error.status === 429 || code === '429') {
-    return '⚠️ Terlalu banyak permintaan. Silakan tunggu beberapa saat dan coba lagi.'
-  }
+  const status = error.status || 0
 
   // Auth errors
   if (message.includes('JWT expired') || message.includes('token')) {
     return '🔒 Sesi telah berakhir. Silakan login kembali.'
   }
+  
+  if (message.includes('Invalid login credentials')) {
+    return '❌ Email atau password salah.'
+  }
+  
+  if (message.includes('Email not confirmed')) {
+    return '📧 Email belum dikonfirmasi. Silakan cek inbox Anda.'
+  }
+  
+  if (message.includes('User already registered')) {
+    return '👤 Email sudah terdaftar. Silakan login.'
+  }
+
+  // Rate limiting
+  if (status === 429 || code === '429') {
+    return '⚠️ Terlalu banyak permintaan. Silakan tunggu 60 detik dan coba lagi.'
+  }
 
   // Network errors
-  if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+  if (message.includes('Failed to fetch') || message.includes('NetworkError') || message.includes('network')) {
     return '📡 Gagal terhubung ke server. Periksa koneksi internet Anda.'
   }
 
-  // RLS errors
+  // RLS/Policy errors
   if (code === '42501' || code === 'PGRST301') {
     return '🔐 Anda tidak memiliki izin untuk melakukan aksi ini.'
   }
@@ -68,31 +151,143 @@ export function handleSupabaseError(error) {
     return '🔗 Data terkait tidak ditemukan.'
   }
 
+  // Not found
+  if (code === 'PGRST116') {
+    return '🔍 Data tidak ditemukan.'
+  }
+
   // Timeout
   if (message.includes('timeout') || message.includes('abort')) {
     return '⏱️ Permintaan timeout. Silakan coba lagi.'
   }
 
-  // Default
+  // Storage errors
+  if (message.includes('storage') || message.includes('bucket')) {
+    return '💾 Gagal mengakses penyimpanan. Silakan coba lagi.'
+  }
+
+  // Default error
   return `❌ ${message || 'Terjadi kesalahan. Silakan coba lagi.'}`
 }
 
 /**
- * Get current session
+ * Handle and log errors with optional callback
  */
-export const getSession = async () => {
-  const { data: { session }, error } = await supabase.auth.getSession()
-  if (error) throw error
-  return session
+export const handleError = (error, customMessage = '') => {
+  const userMessage = customMessage || handleSupabaseError(error)
+  
+  // Log error untuk debugging
+  console.error('🔴 Supabase Error:', {
+    message: error.message,
+    code: error.code,
+    status: error.status,
+    details: error.details,
+    hint: error.hint,
+    timestamp: new Date().toISOString(),
+  })
+  
+  // Emit ke global error handler jika tersedia
+  if (window.__app?.events) {
+    window.__app.events.emit('app:error', {
+      type: 'supabase',
+      error,
+      userMessage,
+    })
+  }
+  
+  return userMessage
+}
+
+// ============================================================
+// Debug Helpers
+// ============================================================
+
+/**
+ * Debug auth state
+ */
+export const debugAuth = async () => {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession()
+    
+    console.group('🔐 Nexovra Auth Debug')
+    console.log('📅 Timestamp:', new Date().toISOString())
+    console.log('🔗 Supabase URL:', supabaseUrl)
+    console.log('👤 Session:', session ? {
+      user: session.user?.email,
+      expires: new Date(session.expires_at * 1000).toLocaleString(),
+      provider: session.user?.app_metadata?.provider,
+    } : 'No active session')
+    console.log('❌ Error:', error)
+    console.log('💾 Local Storage Keys:', Object.keys(localStorage).filter(k => 
+      k.includes('nexovra') || k.includes('sb-') || k.includes('supabase')
+    ))
+    console.log('🌐 Window Location:', window.location.href)
+    console.groupEnd()
+    
+    return { session, error }
+  } catch (e) {
+    console.error('Debug auth failed:', e)
+    return { session: null, error: e }
+  }
 }
 
 /**
- * Get current user
+ * Clear all auth data (for troubleshooting)
  */
-export const getCurrentUser = async () => {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error) throw error
-  return user
+export const clearAuthData = async () => {
+  console.warn('🧹 Clearing all auth data...')
+  
+  // Sign out
+  await supabase.auth.signOut()
+  
+  // Clear Supabase-related localStorage
+  Object.keys(localStorage).forEach(key => {
+    if (key.includes('nexovra') || key.includes('sb-') || key.includes('supabase')) {
+      localStorage.removeItem(key)
+      console.log(`  Removed: ${key}`)
+    }
+  })
+  
+  console.log('✅ Auth data cleared. Please refresh the page.')
+  window.location.reload()
+}
+
+/**
+ * Check Supabase connection
+ */
+export const checkConnection = async () => {
+  try {
+    const start = performance.now()
+    const { data, error } = await supabase.from('_prisma_migrations').select('count').limit(0)
+    const latency = Math.round(performance.now() - start)
+    
+    console.log('✅ Supabase connected!', {
+      latency: `${latency}ms`,
+      url: supabaseUrl,
+      error: error || 'none',
+    })
+    
+    return { connected: !error, latency }
+  } catch (error) {
+    console.error('❌ Supabase connection failed:', error)
+    return { connected: false, latency: 0, error }
+  }
+}
+
+// ============================================================
+// Global Debug Helpers
+// ============================================================
+
+// Expose debug functions ke window untuk console debugging
+if (typeof window !== 'undefined') {
+  window.__nexovra = {
+    debugAuth,
+    clearAuthData,
+    checkConnection,
+    getSession,
+    getCurrentUser,
+    supabase,
+  }
 }
 
 export default supabase

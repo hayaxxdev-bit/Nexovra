@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexovra — Aplikasi Manajemen Keuangan Pribadi & Bisnis</title>
+  <meta name="description" content="Kelola keuangan pribadi & bisnis dengan Nexovra. Multi akun, transfer, buku kas, laporan, daily planner. Gratis!" />
+  <meta name="keywords" content="aplikasi keuangan, manajemen keuangan, catatan keuangan, buku kas, laporan keuangan, nexovra" />
+  <meta property="og:title" content="Nexovra — Aplikasi Manajemen Keuangan" />
+  <meta property="og:description" content="Kelola keuangan pribadi & bisnis dalam satu aplikasi gratis." />
+  <meta property="og:url" content="https://nexovra.vercel.app" />
+  <meta property="og:type" content="website" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>body{font-family:'Inter',sans-serif}</style>
+</head>
+<body class="bg-gray-950 text-white">
+
+  <!-- Nav -->
+  <nav class="border-b border-gray-800 sticky top-0 bg-gray-950/80 backdrop-blur z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 bg-gradient-to-br from-purple-600 to-indigo-700 rounded-xl flex items-center justify-center font-bold text-lg">N</div>
+        <span class="font-bold text-xl">Nexovra</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="/login" class="text-gray-300 hover:text-white font-medium text-sm">Masuk</a>
+        <a href="/register" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl font-medium text-sm transition">Daftar Gratis</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="max-w-4xl mx-auto px-4 py-24 text-center">
+    <h1 class="text-5xl md:text-7xl font-extrabold mb-6 leading-tight">
+      Kelola Keuangan<br/>
+      <span class="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">Lebih Cerdas</span>
+    </h1>
+    <p class="text-xl text-gray-400 max-w-2xl mx-auto mb-10">
+      Nexovra membantu Anda mencatat pemasukan, pengeluaran, transfer, buku kas, laporan keuangan, dan daily planner dalam satu aplikasi.
+    </p>
+    <a href="/register" class="inline-block bg-purple-600 hover:bg-purple-500 text-white px-8 py-4 rounded-2xl font-semibold text-lg shadow-xl shadow-purple-500/25 transition">
+      🚀 Mulai Gratis
+    </a>
+  </section>
+
+  <!-- Features -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl"><div class="text-4xl mb-4">💰</div><h3 class="font-bold text-lg mb-2">Multi Akun</h3><p class="text-gray-400 text-sm">Cash, Bank, E-Wallet, Tabungan, Investasi — semua dalam satu dashboard.</p></div>
+      <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl"><div class="text-4xl mb-4">📊</div><h3 class="font-bold text-lg mb-2">Laporan Otomatis</h3><p class="text-gray-400 text-sm">Grafik interaktif, export PDF & Excel. Ringkasan harian hingga tahunan.</p></div>
+      <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl"><div class="text-4xl mb-4">🔄</div><h3 class="font-bold text-lg mb-2">Transfer Antar Akun</h3><p class="text-gray-400 text-sm">Pindahkan dana dengan mudah. Riwayat tercatat otomatis.</p></div>
+      <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl"><div class="text-4xl mb-4">📖</div><h3 class="font-bold text-lg mb-2">Buku Kas Digital</h3><p class="text-gray-400 text-sm">Arus kas dengan saldo berjalan. Filter per akun & tanggal.</p></div>
+      <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl"><div class="text-4xl mb-4">📅</div><h3 class="font-bold text-lg mb-2">Daily Planner</h3><p class="text-gray-400 text-sm">Kalender, agenda, mood tracker, target harian dalam satu tempat.</p></div>
+      <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl"><div class="text-4xl mb-4">🔒</div><h3 class="font-bold text-lg mb-2">Aman & Privat</h3><p class="text-gray-400 text-sm">Enkripsi data & Row Level Security. Hanya Anda yang bisa mengakses.</p></div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="text-center py-16 bg-gradient-to-r from-purple-600 to-indigo-700">
+    <h2 class="text-3xl font-bold mb-4">Siap Kelola Keuangan?</h2>
+    <p class="text-white/80 mb-8">Gabung sekarang, gratis selamanya.</p>
+    <a href="/register" class="inline-block bg-white text-purple-700 px-8 py-4 rounded-2xl font-semibold text-lg hover:bg-gray-100 transition">🚀 Buat Akun Gratis</a>
+  </section>
+
+  <!-- Footer -->
+  <footer class="text-center py-8 text-gray-600 text-sm">
+    <p>&copy; 2026 Nexovra. All rights reserved.</p>
+    <p class="mt-1"><a href="/login" class="hover:text-gray-400">Masuk</a> · <a href="/register" class="hover:text-gray-400">Daftar</a></p>
+  </footer>
+
+</body>
+</html>

@@ -1,20 +1,269 @@
 <!DOCTYPE html>
-<html lang="id" class="light">
+<html lang="id" class="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="FinanceOS - Sistem Manajemen Keuangan" />
-  <title>FinanceOS</title>
-  <link rel="icon" type="image/svg+xml" href="./src/images/nexovra.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  
+  <!-- ============================================================
+       SEO META TAGS
+       ============================================================ -->
+  <title>Nexovra — Sistem Manajemen Keuangan Modern</title>
+  <meta name="description" content="Nexovra adalah aplikasi manajemen keuangan modern untuk pencatatan pemasukan, pengeluaran, multi akun, transfer, buku kas, laporan keuangan, dan daily planner. Gratis, aman, dan mudah digunakan." />
+  <meta name="keywords" content="aplikasi keuangan, manajemen keuangan, catatan keuangan, pemasukan pengeluaran, buku kas, laporan keuangan, financial management, money tracker, nexovra" />
+  <meta name="author" content="Nexovra" />
+  <meta name="robots" content="index, follow" />
+  <meta name="googlebot" content="index, follow" />
+  <link rel="canonical" href="https://nexovra-mu.vercel.app" />
+  
+  <!-- PWA Meta -->
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Nexovra" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://nexovra-mu.vercel.app" />
+  <meta property="og:title" content="Nexovra — Sistem Manajemen Keuangan Modern" />
+  <meta property="og:description" content="Kelola keuangan pribadi & bisnis dengan Nexovra. Catat pemasukan, pengeluaran, multi akun, transfer, buku kas, laporan keuangan, dan daily planner." />
+  <meta property="og:image" content="https://nexovra-mu.vercel.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="Nexovra" />
+  <meta property="og:locale" content="id_ID" />
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://nexovra-mu.vercel.app" />
+  <meta name="twitter:title" content="Nexovra — Sistem Manajemen Keuangan" />
+  <meta name="twitter:description" content="Kelola keuangan Anda dengan mudah dan efisien menggunakan Nexovra." />
+  <meta name="twitter:image" content="https://nexovra-mu.vercel.app/og-image.png" />
+  
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Nexovra",
+    "description": "Sistem manajemen keuangan modern untuk pencatatan pemasukan, pengeluaran, multi akun, transfer, buku kas, dan laporan keuangan.",
+    "url": "https://nexovra-mu.vercel.app",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "IDR"
+    }
+  }
+  </script>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/src/images/nexovra-icon.ico" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- Preconnect untuk performa -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  
+  <!-- Font -->
+  <link 
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" 
+    rel="stylesheet"
+    media="print"
+    onload="this.media='all'"
+  />
+  <noscript>
+    <link 
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" 
+      rel="stylesheet"
+    />
+  </noscript>
   
   <!-- Chart.js -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script> -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+  
+  <!-- Loading Styles -->
+  <style>
+    /* Loading screen */
+    .app-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #0a0a0f;
+    }
+    
+    .app-loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(99, 102, 241, 0.2);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Offline banner */
+    .offline-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      color: white;
+      text-align: center;
+      padding: 8px 16px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transform: translateY(-100%);
+      transition: transform 0.3s ease;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+    
+    .offline-banner.show {
+      transform: translateY(0);
+    }
+    
+    /* Toast container */
+    .toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 380px;
+      width: 100%;
+      pointer-events: none;
+    }
+    
+    /* Smooth theme transition */
+    html {
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    body {
+      transition: background-color 0.3s, color 0.3s;
+    }
+  </style>
+  
 </head>
 <body class="bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased">
-  <div id="app"></div>
+  
+  <!-- App Container -->
+  <div id="app">
+    <div class="app-loading">
+      <div class="text-center">
+        <div class="app-loading-spinner mx-auto mb-4"></div>
+        <p class="text-gray-400 text-sm font-medium">Memuat Nexovra...</p>
+        <p class="text-gray-600 text-xs mt-2">Sistem Manajemen Keuangan</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Offline Banner -->
+  <div id="offline-banner" class="offline-banner">
+    📡 Anda sedang offline. Beberapa fitur mungkin tidak tersedia.
+  </div>
+  
+  <!-- Application Script -->
   <script type="module" src="/src/main.js"></script>
+  
+  <!-- Service Worker & Offline Detection -->
+  <script>
+    // ============================================================
+    // SERVICE WORKER REGISTRATION
+    // ============================================================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('✅ Service Worker registered:', registration.scope);
+          })
+          .catch(error => {
+            console.error('❌ Service Worker registration failed:', error);
+          });
+      });
+    }
+    
+    // ============================================================
+    // OFFLINE / ONLINE DETECTION
+    // ============================================================
+    const offlineBanner = document.getElementById('offline-banner');
+    
+    function showOfflineBanner() {
+      offlineBanner?.classList.add('show');
+    }
+    
+    function hideOfflineBanner() {
+      offlineBanner?.classList.remove('show');
+    }
+    
+    window.addEventListener('offline', () => {
+      showOfflineBanner();
+      // Auto-hide after 5 seconds
+      setTimeout(hideOfflineBanner, 5000);
+    });
+    
+    window.addEventListener('online', () => {
+      hideOfflineBanner();
+    });
+    
+    // Set initial state
+    if (!navigator.onLine) {
+      showOfflineBanner();
+    }
+    
+    // ============================================================
+    // THEME DETECTION
+    // ============================================================
+    (function() {
+      const savedTheme = localStorage.getItem('theme');
+      
+      if (savedTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f9fafb');
+      } else if (savedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0a0a0f');
+      } else {
+        // Auto detect system preference
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        } else {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f9fafb');
+        }
+      }
+    })();
+    
+    // Listen for system theme changes
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      const savedTheme = localStorage.getItem('theme');
+      if (!savedTheme) {
+        if (e.matches) {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0a0a0f');
+        } else {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f9fafb');
+        }
+      }
+    });
+  </script>
 </body>
 </html>
