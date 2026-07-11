@@ -1,3 +1,5 @@
+// @services/auth.service.js
+
 import { supabase } from '@services/supabase.js'
 
 export const AuthService = {
@@ -41,7 +43,10 @@ export const AuthService = {
 
   async loginWithGoogle() {
     try {
+      // Gunakan URL absolut yang sama dengan yang didaftarkan di Supabase Dashboard
       const redirectUrl = `${window.location.origin}/auth/callback`;
+      
+      console.log('Google OAuth redirect to:', redirectUrl);
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -50,13 +55,14 @@ export const AuthService = {
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-            // Tambahkan scopes yang diperlukan
-            scopes: 'email profile',
           },
         },
       });
 
       if (error) throw error;
+      
+      // Supabase akan redirect ke Google
+      // Tidak perlu return data karena akan redirect
       return data;
     } catch (error) {
       console.error('Google login error:', error);
@@ -68,14 +74,12 @@ export const AuthService = {
     try {
       const redirectUrl = `${window.location.origin}/auth/callback`;
       
+      console.log('GitHub OAuth redirect to:', redirectUrl);
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
           redirectTo: redirectUrl,
-          queryParams: {
-            // Minta akses ke email user
-            scope: 'user:email',
-          },
         },
       });
 
@@ -89,20 +93,31 @@ export const AuthService = {
 
   async handleOAuthCallback() {
     try {
-      const { data, error } = await supabase.auth.getSession();
+      // Ambil session dari URL (Supabase sudah handle otomatis)
+      const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) throw error;
       
-      if (data?.session) {
-        // Simpan session info
-        window.__app?.store?.setState('auth.user', data.session.user);
-        window.__app?.store?.setState('auth.session', data.session);
+      if (session) {
+        console.log('✅ OAuth login successful:', session.user.email);
         
-        // Redirect ke dashboard
-        window.__app?.router?.navigate('/', true);
+        // Simpan ke store
+        if (window.__app?.store) {
+          window.__app.store.setState('auth.user', session.user);
+          window.__app.store.setState('auth.session', session);
+        }
+        
+        // Buat/update profile jika perlu
+        try {
+          await this.createProfile(session.user);
+        } catch (profileError) {
+          console.warn('Profile creation skipped:', profileError);
+        }
+        
+        return { session, user: session.user };
       }
       
-      return data;
+      return null;
     } catch (error) {
       console.error('OAuth callback error:', error);
       throw error;
@@ -118,10 +133,16 @@ export const AuthService = {
     
     // Clear Supabase-related storage
     Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('sb-') || key.includes('supabase')) {
+      if (key.startsWith('sb-') || key.includes('supabase') || key.includes('nexovra')) {
         localStorage.removeItem(key)
       }
     })
+    
+    // Clear store
+    if (window.__app?.store) {
+      window.__app.store.setState('auth.user', null)
+      window.__app.store.setState('auth.session', null)
+    }
   },
 
   async resetPassword(email) {
@@ -165,7 +186,6 @@ export const AuthService = {
       .single()
 
     if (error) {
-      // Jika profile belum ada, buat baru
       if (error.code === 'PGRST116') {
         return this.createProfile(user)
       }
@@ -175,19 +195,31 @@ export const AuthService = {
   },
 
   async createProfile(user) {
+    if (!user || !user.id) {
+      console.warn('Cannot create profile: No user data');
+      return null;
+    }
+
+    const profileData = {
+      id: user.id,
+      email: user.email,
+      full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+      avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
+      created_at: new Date().toISOString(),
+    };
+
+    console.log('Creating profile:', profileData);
+
     const { data, error } = await supabase
       .from('profiles')
-      .insert({
-        id: user.id,
-        email: user.email,
-        full_name: user.user_metadata?.full_name || '',
-        avatar_url: user.user_metadata?.avatar_url || '',
-        created_at: new Date().toISOString(),
-      })
+      .upsert(profileData, { onConflict: 'id' })
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.warn('Profile creation/upsert error:', error);
+      return null;
+    }
     return data
   },
 
@@ -225,15 +257,26 @@ export const AuthService = {
 
 // Setup auth state change listener
 supabase.auth.onAuthStateChange((event, session) => {
+  // console.log('🔐 Auth state changed:', event, session?.user?.email);
+  
   switch (event) {
     case 'TOKEN_REFRESHED':
       console.log('🔑 Token refreshed successfully')
       break
     case 'SIGNED_IN':
-      console.log('✅ User signed in')
+      console.log('✅ User signed in:', session?.user?.email)
+      // Update store jika ada
+      if (window.__app?.store && session) {
+        window.__app.store.setState('auth.user', session.user)
+        window.__app.store.setState('auth.session', session)
+      }
       break
     case 'SIGNED_OUT':
       console.log('👋 User signed out')
+      if (window.__app?.store) {
+        window.__app.store.setState('auth.user', null)
+        window.__app.store.setState('auth.session', null)
+      }
       break
     case 'USER_UPDATED':
       console.log('👤 User updated')

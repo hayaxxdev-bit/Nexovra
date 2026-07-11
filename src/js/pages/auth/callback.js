@@ -1,34 +1,49 @@
-import { AuthService } from '@services/auth.service.js';
+// @pages/auth/callback.js
 
-export async function render(container) {
+import { AuthService } from '@services/auth.service.js'
+import { Toast } from '@components/ui/toast.js'
+
+/**
+ * OAuth Callback Page
+ * Menangani redirect dari Google/GitHub setelah login
+ */
+export async function render(container, params = {}) {
   container.innerHTML = `
-    <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0a0a0f]">
+    <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0a0a0f] p-4">
       <div class="text-center">
-        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center">
-          <svg class="animate-spin w-8 h-8 text-white" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        </div>
-        <p class="text-gray-600 dark:text-gray-400">Menyelesaikan autentikasi...</p>
+        <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-teal-500 border-t-transparent mb-4"></div>
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Memproses Login...</h2>
+        <p class="text-gray-500 dark:text-gray-400 mt-2">Mohon tunggu sebentar</p>
       </div>
     </div>
   `;
+  
+  await handleCallback(container);
+}
 
+async function handleCallback(container) {
   try {
-    await AuthService.handleOAuthCallback();
+    // Tunggu sebentar untuk memastikan Supabase memproses URL
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const result = await AuthService.handleOAuthCallback();
+    
+    if (result?.user) {
+      Toast.success(`✅ Selamat datang ${result.user.user_metadata?.full_name || result.user.email}!`, 3000);
+      
+      // Redirect ke dashboard/home
+      setTimeout(() => {
+        window.__app.router.navigate('/', true);
+      }, 1000);
+    } else {
+      throw new Error('Tidak ada session ditemukan');
+    }
   } catch (error) {
-    container.innerHTML = `
-      <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0a0a0f] p-4">
-        <div class="text-center max-w-md">
-          <div class="text-6xl mb-4">😕</div>
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Gagal Autentikasi</h2>
-          <p class="text-gray-600 dark:text-gray-400 mb-6">${error.message}</p>
-          <a href="/login" class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-teal-500 to-purple-600 text-white rounded-xl">
-            Kembali ke Login
-          </a>
-        </div>
-      </div>
-    `;
+    console.error('Callback error:', error);
+    Toast.error('❌ Gagal login. Silakan coba lagi.', 5000);
+    
+    setTimeout(() => {
+      window.__app.router.navigate('/login', true);
+    }, 2000);
   }
 }

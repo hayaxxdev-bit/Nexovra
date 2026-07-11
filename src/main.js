@@ -1,3 +1,5 @@
+// @main.js
+
 import "@css/main.css";
 import "@css/themes.css";
 
@@ -6,6 +8,7 @@ import Chart from "chart.js/auto";
 window.Chart = Chart;
 
 import { Router } from "@core/router.js";
+import { SchedulerService } from '@services/scheduler.services.js'
 import { Store } from "@core/store.js";
 import { EventBus } from "@core/events.js";
 import { supabase } from "@services/supabase.js";
@@ -301,10 +304,12 @@ const setupCSP = () => {
   meta.httpEquiv = "Content-Security-Policy";
   meta.content = `
     default-src 'self';
-    script-src 'self' 'unsafe-inline';
-    style-src 'self' 'unsafe-inline';
-    img-src 'self' data: https:;
-    connect-src 'self' ${import.meta.env.VITE_SUPABASE_URL} https://*.supabase.co;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com data:;
+    img-src 'self' data: https: http:;
+    connect-src 'self' ${import.meta.env.VITE_SUPABASE_URL} https://*.supabase.co wss://*.supabase.co;
+    worker-src 'self' blob:;
   `;
   document.head.appendChild(meta);
 };
@@ -330,7 +335,33 @@ window.__app = {
 };
 
 // ============================================================
-// Event Handlers Setup
+// Scheduler Integration - FIXED
+// ============================================================
+
+// Function to start scheduler
+const startScheduler = () => {
+  console.log('⏰ Starting scheduler...');
+  try {
+    SchedulerService.start();
+    console.log('✅ Scheduler started successfully');
+  } catch (error) {
+    console.error('❌ Failed to start scheduler:', error);
+  }
+};
+
+// Function to stop scheduler
+const stopScheduler = () => {
+  console.log('⏰ Stopping scheduler...');
+  try {
+    SchedulerService.stop();
+    console.log('✅ Scheduler stopped successfully');
+  } catch (error) {
+    console.error('❌ Failed to stop scheduler:', error);
+  }
+};
+
+// ============================================================
+// Event Handlers Setup - FIXED
 // ============================================================
 const setupGlobalErrorHandlers = () => {
   window.addEventListener("error", (event) => {
@@ -355,13 +386,21 @@ const setupGlobalErrorHandlers = () => {
 };
 
 const setupAppEventListeners = () => {
-  // Auth state changes
+  // Auth state changes from Supabase
   supabase.auth.onAuthStateChange((event, session) => {
+    console.log('🔐 Auth state changed:', event, session?.user?.email);
+    
     switch (event) {
       case "SIGNED_IN":
         if (session) {
           window.__app.store.setState("auth.user", session.user);
           window.__app.store.setState("auth.session", session);
+          
+          // Emit event for login
+          window.__app.events.emit("auth:loggedIn", { 
+            user: session.user, 
+            session: session 
+          });
           window.__app.events.emit("auth:signedIn", session.user);
         }
         break;
@@ -369,11 +408,16 @@ const setupAppEventListeners = () => {
       case "SIGNED_OUT":
         window.__app.store.setState("auth.user", null);
         window.__app.store.setState("auth.session", null);
+        
+        // Emit event for logout
+        window.__app.events.emit("auth:loggedOut");
         window.__app.events.emit("auth:signedOut");
         break;
 
       case "TOKEN_REFRESHED":
-        window.__app.store.setState("auth.session", session);
+        if (session) {
+          window.__app.store.setState("auth.session", session);
+        }
         break;
 
       case "USER_UPDATED":
@@ -383,6 +427,26 @@ const setupAppEventListeners = () => {
         break;
     }
   });
+
+  // ============================================================
+  // Scheduler Event Listeners - FIXED
+  // ============================================================
+  
+  // Start scheduler when user logs in
+  window.__app.events.on("auth:loggedIn", (data) => {
+    console.log('👤 User logged in, starting scheduler...', data?.user?.email);
+    startScheduler();
+  });
+
+  // Stop scheduler when user logs out
+  window.__app.events.on("auth:loggedOut", () => {
+    console.log('👤 User logged out, stopping scheduler...');
+    stopScheduler();
+  });
+
+  // ============================================================
+  // Other Event Listeners
+  // ============================================================
 
   // Route not found
   window.__app.events.on("route:notfound", (data) => {
@@ -449,9 +513,40 @@ const configureRoutes = (router) => {
 };
 
 // ============================================================
+// Expose to Window for Debugging
+// ============================================================
+window.__nexovra = {
+  debug: {
+    auth: async () => {
+      const { data } = await supabase.auth.getSession();
+      console.log('🔐 Auth Debug:', data);
+      return data;
+    },
+    store: () => window.__app?.store?.getState(),
+    events: () => window.__app?.events,
+  },
+  scheduler: {
+    start: startScheduler,
+    stop: stopScheduler,
+    triggerMonthlyReport: () => SchedulerService.triggerMonthlyReportNow(),
+    triggerApkUpdate: () => SchedulerService.triggerApkUpdateCheckNow(),
+    status: () => console.log('Scheduler running:', SchedulerService._isRunning),
+  },
+  theme: {
+    toggle: () => ThemeManager.toggle(),
+    get: () => ThemeManager.getCurrent(),
+  },
+  supabase,
+};
+
+console.log('🛠️ Debug tools available: window.__nexovra');
+
+// ============================================================
 // Bootstrap Application
 // ============================================================
 async function bootstrap() {
+  console.log('🚀 Bootstrapping Nexovra...');
+
   // Validate environment
   try {
     validateEnv();
@@ -487,15 +582,24 @@ async function bootstrap() {
   // Configure routes
   configureRoutes(router);
 
-  // Setup event listeners
+  // Setup event listeners (includes scheduler listeners)
   setupAppEventListeners();
 
   // Check existing session
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
+      console.log('👤 Existing session found for:', session.user.email);
       window.__app.store.setState("auth.user", session.user);
       window.__app.store.setState("auth.session", session);
+      
+      // Trigger login event for existing session
+      window.__app.events.emit("auth:loggedIn", { 
+        user: session.user, 
+        session: session 
+      });
+    } else {
+      console.log('👤 No existing session found');
     }
   } catch (error) {
     console.error("Session check failed:", error);

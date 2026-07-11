@@ -1,3 +1,5 @@
+// @services/supabase.js
+
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -45,9 +47,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Auth Helpers
 // ============================================================
 
-/**
- * Get current session
- */
 export const getSession = async () => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession()
@@ -59,9 +58,6 @@ export const getSession = async () => {
   }
 }
 
-/**
- * Get current user
- */
 export const getCurrentUser = async () => {
   try {
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -73,17 +69,11 @@ export const getCurrentUser = async () => {
   }
 }
 
-/**
- * Check if user is authenticated
- */
 export const isAuthenticated = async () => {
   const session = await getSession()
   return !!session
 }
 
-/**
- * Refresh session
- */
 export const refreshSession = async () => {
   try {
     const { data: { session }, error } = await supabase.auth.refreshSession()
@@ -99,9 +89,6 @@ export const refreshSession = async () => {
 // Error Handler
 // ============================================================
 
-/**
- * Handle Supabase errors with user-friendly Indonesian messages
- */
 export function handleSupabaseError(error) {
   if (!error) return 'Terjadi kesalahan tidak diketahui.'
 
@@ -124,6 +111,11 @@ export function handleSupabaseError(error) {
   
   if (message.includes('User already registered')) {
     return '👤 Email sudah terdaftar. Silakan login.'
+  }
+
+  // OAuth errors
+  if (message.includes('provider') || message.includes('oauth')) {
+    return '🔑 Gagal login dengan provider. Silakan coba lagi.'
   }
 
   // Rate limiting
@@ -170,13 +162,9 @@ export function handleSupabaseError(error) {
   return `❌ ${message || 'Terjadi kesalahan. Silakan coba lagi.'}`
 }
 
-/**
- * Handle and log errors with optional callback
- */
 export const handleError = (error, customMessage = '') => {
   const userMessage = customMessage || handleSupabaseError(error)
   
-  // Log error untuk debugging
   console.error('🔴 Supabase Error:', {
     message: error.message,
     code: error.code,
@@ -186,7 +174,6 @@ export const handleError = (error, customMessage = '') => {
     timestamp: new Date().toISOString(),
   })
   
-  // Emit ke global error handler jika tersedia
   if (window.__app?.events) {
     window.__app.events.emit('app:error', {
       type: 'supabase',
@@ -199,12 +186,39 @@ export const handleError = (error, customMessage = '') => {
 }
 
 // ============================================================
+// OAuth Callback Handler
+// ============================================================
+
+export const handleOAuthCallback = async () => {
+  try {
+    // Supabase akan otomatis menangani session dari URL
+    const { data: { session }, error } = await supabase.auth.getSession()
+    
+    if (error) throw error
+    
+    if (session) {
+      console.log('✅ OAuth callback success:', session.user.email)
+      
+      // Simpan session ke store
+      if (window.__app?.store) {
+        window.__app.store.setState('auth.user', session.user)
+        window.__app.store.setState('auth.session', session)
+      }
+      
+      return { session, user: session.user }
+    }
+    
+    return { session: null, user: null }
+  } catch (error) {
+    console.error('OAuth callback error:', error)
+    throw error
+  }
+}
+
+// ============================================================
 // Debug Helpers
 // ============================================================
 
-/**
- * Debug auth state
- */
 export const debugAuth = async () => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession()
@@ -231,16 +245,11 @@ export const debugAuth = async () => {
   }
 }
 
-/**
- * Clear all auth data (for troubleshooting)
- */
 export const clearAuthData = async () => {
   console.warn('🧹 Clearing all auth data...')
   
-  // Sign out
   await supabase.auth.signOut()
   
-  // Clear Supabase-related localStorage
   Object.keys(localStorage).forEach(key => {
     if (key.includes('nexovra') || key.includes('sb-') || key.includes('supabase')) {
       localStorage.removeItem(key)
@@ -252,9 +261,6 @@ export const clearAuthData = async () => {
   window.location.reload()
 }
 
-/**
- * Check Supabase connection
- */
 export const checkConnection = async () => {
   try {
     const start = performance.now()
@@ -278,7 +284,6 @@ export const checkConnection = async () => {
 // Global Debug Helpers
 // ============================================================
 
-// Expose debug functions ke window untuk console debugging
 if (typeof window !== 'undefined') {
   window.__nexovra = {
     debugAuth,

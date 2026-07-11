@@ -19,6 +19,26 @@ export default defineConfig({
       "@core": path.resolve(__dirname, "./src/js/core"),
     },
   },
+   server: {
+    port: 3000,
+    cors: true,
+    headers: {
+      'Content-Security-Policy': `
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src 'self' https://fonts.gstatic.com data:;
+        connect-src 'self' 
+          https://tnxmzhqytqomlqjtgtss.supabase.co 
+          https://*.supabase.co 
+          wss://tnxmzhqytqomlqjtgtss.supabase.co 
+          wss://*.supabase.co;
+        img-src 'self' data: https: http:;
+        frame-src 'self';
+        worker-src 'self' blob:;
+      `.replace(/\s+/g, ' ').trim()
+    }
+  },
   build: {
     rollupOptions: {
       output: {

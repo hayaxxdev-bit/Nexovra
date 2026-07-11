@@ -1,12 +1,342 @@
+// @pages/planner/planner.js
+
 import { Calendar } from '@components/ui/calendar.js'
 import { Toast } from '@components/ui/toast.js'
 import { Skeleton } from '@components/ui/skeleton.js'
 import { supabase } from '@services/supabase.js'
 import { formatDate } from '@core/utils.js'
+import { NotificationService } from '@services/notification.service.js'
 
-/**
- * Daily Planner Page - Calendar + Agenda + Mood + Target
- */
+// ============================================================
+// Reminder Checker
+// ============================================================
+// @pages/planner/planner.js (Bagian ReminderChecker)
+
+import { NotificationSoundService } from '@services/notification-sound.services.js'
+
+// ============================================================
+// Reminder Checker dengan Sound & Vibrasi
+// ============================================================
+
+const ReminderChecker = {
+  _interval: null,
+  _checkedTodos: new Set(),
+  _soundEnabled: true,
+  _vibrationEnabled: true,
+  _notificationSound: null,
+
+  /**
+   * Start checking for reminders
+   */
+  start() {
+    if (this._interval) {
+      clearInterval(this._interval)
+    }
+
+    // Load user preferences
+    this._loadPreferences()
+
+    // Check every 15 seconds (lebih cepat untuk responsif)
+    this._interval = setInterval(() => {
+      this._checkReminders()
+    }, 15000)
+
+    // Check immediately
+    setTimeout(() => this._checkReminders(), 1000)
+
+    console.log('⏰ Reminder checker started')
+  },
+
+  /**
+   * Load user preferences
+   */
+  async _loadPreferences() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // Load from user settings
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('notification_sound, notification_vibration')
+        .eq('user_id', user.id)
+        .single()
+
+      if (settings) {
+        this._soundEnabled = settings.notification_sound !== false
+        this._vibrationEnabled = settings.notification_vibration !== false
+      }
+
+      console.log('🔊 Sound enabled:', this._soundEnabled)
+      console.log('📳 Vibration enabled:', this._vibrationEnabled)
+
+    } catch (error) {
+      // Use defaults if settings not found
+      this._soundEnabled = true
+      this._vibrationEnabled = true
+    }
+  },
+
+  /**
+   * Check for due reminders
+   */
+  async _checkReminders() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const now = new Date()
+      const today = now.toISOString().split('T')[0]
+      const currentTime = now.toTimeString().slice(0, 5) // HH:MM
+
+      // Get today's todos with time and not completed
+      const { data: todos, error } = await supabase
+        .from('todos')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('todo_date', today)
+        .eq('status', 'pending')
+        .not('due_time', 'is', null)
+        .order('due_time', { ascending: true })
+
+      if (error) throw error
+      if (!todos || todos.length === 0) return
+
+      // Check each todo
+      for (const todo of todos) {
+        if (!todo.due_time) continue
+
+        // Check if time matches (within 5 minutes window)
+        const timeDiff = this._getTimeDiff(currentTime, todo.due_time)
+        const todoId = todo.id
+
+        // If time is within 0-5 minutes and not yet checked
+        if (timeDiff >= 0 && timeDiff <= 5 && !this._checkedTodos.has(todoId)) {
+          // Send notification dengan sound dan vibrasi
+          await this._sendRichNotification(user.id, todo)
+          this._checkedTodos.add(todoId)
+
+          // Remove from checked after 10 minutes
+          setTimeout(() => {
+            this._checkedTodos.delete(todoId)
+          }, 600000)
+        }
+
+        // If time has passed more than 5 minutes, remove from checked
+        if (timeDiff > 5) {
+          this._checkedTodos.delete(todoId)
+        }
+      }
+
+    } catch (error) {
+      console.error('Error checking reminders:', error)
+    }
+  },
+
+  /**
+   * Get time difference in minutes
+   */
+  _getTimeDiff(current, target) {
+    const [cHour, cMin] = current.split(':').map(Number)
+    const [tHour, tMin] = target.split(':').map(Number)
+    
+    const currentMinutes = cHour * 60 + cMin
+    const targetMinutes = tHour * 60 + tMin
+    
+    return targetMinutes - currentMinutes
+  },
+
+  /**
+   * Send rich notification with sound and vibration
+   */
+  async _sendRichNotification(userId, todo) {
+    try {
+      const priorityEmoji = {
+        urgent: '🔴',
+        high: '🟠',
+        medium: '🟡',
+        low: '🟢'
+      }
+
+      const priorityMap = {
+        urgent: 'urgent',
+        high: 'warning',
+        medium: 'default',
+        low: 'default'
+      }
+
+      const title = `⏰ Reminder: ${todo.title}`
+      const message = `${priorityEmoji[todo.priority] || '📋'} Waktu: ${todo.due_time}`
+      const soundType = todo.priority === 'urgent' ? 'urgent' : 'reminder'
+
+      // ============================================================
+      // 1. Kirim notifikasi ke database (Notification Panel)
+      // ============================================================
+      await NotificationService.createNotification({
+        userId: userId,
+        title: title,
+        message: message,
+        type: todo.priority === 'urgent' ? 'error' : 'warning',
+        link: '/planner',
+        metadata: {
+          todoId: todo.id,
+          dueTime: todo.due_time,
+          priority: todo.priority,
+          sound: this._soundEnabled,
+          vibration: this._vibrationEnabled
+        }
+      })
+
+      // ============================================================
+      // 2. Play Sound dengan Web Audio API
+      // ============================================================
+      if (this._soundEnabled) {
+        try {
+          // Play using Web Audio API (lebih reliable)
+          await NotificationSoundService.play(soundType, { 
+            volume: todo.priority === 'urgent' ? 0.7 : 0.5,
+            loop: todo.priority === 'urgent'
+          })
+
+          // Also try to play audio file for better sound quality
+          try {
+            const audio = new Audio('/sounds/reminder.mp3')
+            audio.volume = 0.5
+            await audio.play()
+          } catch (e) {
+            // Silent fail - Web Audio sudah main
+          }
+
+          console.log(`🔊 Sound played for: ${todo.title}`)
+        } catch (error) {
+          console.warn('⚠️ Sound playback failed:', error)
+        }
+      }
+
+      // ============================================================
+      // 3. Vibrate
+      // ============================================================
+      if (this._vibrationEnabled && navigator.vibrate) {
+        try {
+          const pattern = todo.priority === 'urgent' 
+            ? [100, 50, 100, 50, 200, 100, 300] // Urgent: longer pattern
+            : [150, 50, 150, 50, 150] // Normal: short pattern
+          
+          navigator.vibrate(pattern)
+          console.log(`📳 Vibration played for: ${todo.title}`)
+        } catch (error) {
+          console.warn('⚠️ Vibration failed:', error)
+        }
+      }
+
+      // ============================================================
+      // 4. Browser Notification (if permission granted)
+      // ============================================================
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const notification = new Notification('⏰ Nexovra Reminder', {
+          body: `${message}\n\nKlik untuk melihat detail`,
+          icon: '/favicon-192.png',
+          tag: `reminder-${todo.id}`,
+          requireInteraction: true,
+          silent: false, // Sound already handled
+          vibrate: this._vibrationEnabled ? [200, 100, 200] : undefined,
+          data: { todoId: todo.id, url: '/planner' }
+        })
+
+        // Handle click on notification
+        notification.onclick = () => {
+          window.focus()
+          window.__app?.router?.navigate('/planner')
+          notification.close()
+        }
+
+        // Auto close after 10 seconds
+        setTimeout(() => notification.close(), 10000)
+      }
+
+      // ============================================================
+      // 5. Toast Notification (in-app)
+      // ============================================================
+      const { Toast } = await import('@components/ui/toast.js')
+      Toast.warning(`⏰ ${todo.title} - ${todo.due_time}`, 8000)
+
+      console.log(`✅ Rich notification sent for: ${todo.title}`)
+
+    } catch (error) {
+      console.error('Error sending rich notification:', error)
+    }
+  },
+
+  /**
+   * Toggle sound
+   */
+  toggleSound(enabled) {
+    this._soundEnabled = enabled !== undefined ? enabled : !this._soundEnabled
+    this._savePreferences()
+    return this._soundEnabled
+  },
+
+  /**
+   * Toggle vibration
+   */
+  toggleVibration(enabled) {
+    this._vibrationEnabled = enabled !== undefined ? enabled : !this._vibrationEnabled
+    this._savePreferences()
+    return this._vibrationEnabled
+  },
+
+  /**
+   * Save preferences
+   */
+  async _savePreferences() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      await supabase
+        .from('user_settings')
+        .upsert({
+          user_id: user.id,
+          notification_sound: this._soundEnabled,
+          notification_vibration: this._vibrationEnabled,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        })
+
+      console.log('✅ Preferences saved:', {
+        sound: this._soundEnabled,
+        vibration: this._vibrationEnabled
+      })
+
+    } catch (error) {
+      console.warn('⚠️ Failed to save preferences:', error)
+    }
+  },
+
+  /**
+   * Play test notification (for testing)
+   */
+  async testNotification() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const testTodo = {
+      id: 'test-' + Date.now(),
+      title: '🔔 Test Notifikasi',
+      description: 'Ini adalah test notifikasi dengan suara dan getaran',
+      due_time: new Date().toTimeString().slice(0, 5),
+      priority: 'medium'
+    }
+
+    await this._sendRichNotification(user.id, testTodo)
+    Toast.success('🔔 Test notifikasi dikirim!')
+  }
+}
+// ============================================================
+// Page Render
+// ============================================================
+
 export async function render(container, params = {}) {
   const today = new Date().toISOString().split('T')[0]
 
@@ -17,6 +347,11 @@ export async function render(container, params = {}) {
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Daily Planner</h1>
           <p class="text-gray-500 dark:text-gray-400 mt-1">Rencanakan hari Anda dengan lebih baik</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="toggle-reminder" class="btn btn-sm ${ReminderChecker._interval ? 'btn-success' : 'btn-secondary'}">
+            ${ReminderChecker._interval ? '🔔 Reminder Aktif' : '🔕 Aktifkan Reminder'}
+          </button>
         </div>
       </div>
 
@@ -99,7 +434,23 @@ export async function render(container, params = {}) {
 
   // Setup events
   setupPlannerEvents(container)
+
+  // Start reminder checker jika user login
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
+    // Cek permission browser notification
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+    
+    // Start reminder
+    ReminderChecker.start()
+  }
 }
+
+// ============================================================
+// Render Mood Buttons
+// ============================================================
 
 function renderMoodButtons() {
   const moods = [
@@ -122,6 +473,10 @@ function renderMoodButtons() {
   `).join('')
 }
 
+// ============================================================
+// Calendar
+// ============================================================
+
 function initCalendar(container, selectedDate) {
   const calendarContainer = container.querySelector('#planner-calendar')
   if (!calendarContainer) return
@@ -133,6 +488,10 @@ function initCalendar(container, selectedDate) {
     },
   })
 }
+
+// ============================================================
+// Load Data
+// ============================================================
 
 async function loadPlannerData(container, date) {
   const targetInput = container.querySelector('#planner-target')
@@ -167,12 +526,13 @@ async function loadPlannerData(container, date) {
     }
 
     // Load mood
-    if (dailyNote?.priority) {
+    if (dailyNote?.mood) {
       container.querySelectorAll('.mood-btn').forEach(btn => {
         btn.classList.remove('border-primary-500', 'bg-primary-50', 'dark:bg-primary-950')
+        if (btn.dataset.mood === dailyNote.mood) {
+          btn.classList.add('border-primary-500', 'bg-primary-50', 'dark:bg-primary-950')
+        }
       })
-      // Note: mood disimpan di priority untuk sementara
-      // Bisa disesuaikan nanti
     }
 
     // Load todos as agenda
@@ -181,8 +541,8 @@ async function loadPlannerData(container, date) {
       .select('*')
       .eq('user_id', user.id)
       .eq('todo_date', date)
+      .order('due_time', { ascending: true })
       .order('priority', { ascending: false })
-      .order('created_at', { ascending: true })
 
     renderAgendaList(agendaList, todos || [])
 
@@ -196,10 +556,6 @@ async function loadPlannerData(container, date) {
     const today = new Date()
     const isToday = date === today.toISOString().split('T')[0]
     
-    const dateDisplay = isToday 
-      ? 'Hari Ini' 
-      : formatDate(date, 'full')
-
     // Store current date
     container.dataset.currentDate = date
 
@@ -208,6 +564,10 @@ async function loadPlannerData(container, date) {
     Toast.error('Gagal memuat data planner')
   }
 }
+
+// ============================================================
+// Render Agenda List
+// ============================================================
 
 function renderAgendaList(container, todos) {
   if (!container) return
@@ -238,8 +598,17 @@ function renderAgendaList(container, todos) {
       cancelled: '❌',
     }
 
+    // Check if time has passed (for reminder indicator)
+    const now = new Date()
+    const today = now.toISOString().split('T')[0]
+    const isToday = todo.todo_date === today
+    const timePassed = isToday && todo.due_time && this?._getTimeDiff?.(
+      now.toTimeString().slice(0, 5), 
+      todo.due_time
+    ) < 0
+
     return `
-      <div class="flex items-start gap-3 p-3 rounded-xl border-l-4 ${priorityColors[todo.priority] || priorityColors.medium} bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 transition-all hover:shadow-sm group">
+      <div class="flex items-start gap-3 p-3 rounded-xl border-l-4 ${priorityColors[todo.priority] || priorityColors.medium} bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 transition-all hover:shadow-sm group ${timePassed ? 'opacity-60' : ''}">
         <!-- Checkbox -->
         <button 
           class="todo-checkbox mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center transition-all ${todo.status === 'completed' ? 'bg-green-500 border-green-500' : 'hover:border-primary-500'}"
@@ -255,18 +624,26 @@ function renderAgendaList(container, todos) {
 
         <!-- Content -->
         <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="text-sm ${todo.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'}">
               ${todo.title}
             </span>
             <span class="text-xs">${statusIcons[todo.status] || ''}</span>
             ${todo.priority === 'urgent' ? '<span class="badge badge-danger text-[10px]">Penting</span>' : ''}
+            ${timePassed ? '<span class="badge badge-warning text-[10px]">⏰ Lewat</span>' : ''}
           </div>
           ${todo.description ? `
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">${todo.description}</p>
           ` : ''}
           ${todo.due_time ? `
-            <p class="text-xs text-gray-400 mt-1">⏰ ${todo.due_time}</p>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-xs ${timePassed ? 'text-red-500' : 'text-gray-400'}">
+                ⏰ ${todo.due_time}
+              </span>
+              ${!timePassed && todo.status !== 'completed' && isToday ? `
+                <span class="text-[10px] text-green-500">🔔 Akan diingatkan</span>
+              ` : ''}
+            </div>
           ` : ''}
         </div>
 
@@ -287,6 +664,10 @@ function renderAgendaList(container, todos) {
     `
   }).join('')
 }
+
+// ============================================================
+// Setup Events
+// ============================================================
 
 function setupPlannerEvents(container) {
   // Mood buttons
@@ -309,6 +690,23 @@ function setupPlannerEvents(container) {
     savePlanner(container)
   })
 
+  // Toggle reminder
+  container.querySelector('#toggle-reminder')?.addEventListener('click', () => {
+    if (ReminderChecker._interval) {
+      ReminderChecker.stop()
+      Toast.info('🔕 Reminder dimatikan')
+      const btn = container.querySelector('#toggle-reminder')
+      btn.textContent = '🔕 Aktifkan Reminder'
+      btn.className = 'btn btn-sm btn-secondary'
+    } else {
+      ReminderChecker.start()
+      Toast.success('🔔 Reminder diaktifkan')
+      const btn = container.querySelector('#toggle-reminder')
+      btn.textContent = '🔔 Reminder Aktif'
+      btn.className = 'btn btn-sm btn-success'
+    }
+  })
+
   // Todo checkbox (delegated)
   container.querySelector('#agenda-list')?.addEventListener('click', async (e) => {
     const checkbox = e.target.closest('.todo-checkbox')
@@ -326,7 +724,6 @@ function setupPlannerEvents(container) {
 
       Toast.success(newStatus === 'completed' ? 'Selesai! 🎉' : 'Dibatalkan')
       
-      // Reload
       const date = container.dataset.currentDate || new Date().toISOString().split('T')[0]
       loadPlannerData(container, date)
     } catch (error) {
@@ -352,7 +749,20 @@ function setupPlannerEvents(container) {
       Toast.error('Gagal menghapus agenda')
     }
   })
+
+  // Edit todo (delegated)
+  container.querySelector('#agenda-list')?.addEventListener('click', async (e) => {
+    const editBtn = e.target.closest('.edit-todo-btn')
+    if (!editBtn) return
+
+    const todoId = editBtn.dataset.id
+    await showEditAgendaForm(container, todoId)
+  })
 }
+
+// ============================================================
+// Save Planner
+// ============================================================
 
 async function savePlanner(container) {
   const btn = container.querySelector('#save-planner')
@@ -360,11 +770,8 @@ async function savePlanner(container) {
   const target = container.querySelector('#planner-target')?.value?.trim() || ''
   const notes = container.querySelector('#planner-notes')?.value?.trim() || ''
   
-  // Get selected mood
   const moodBtn = container.querySelector('.mood-btn.border-primary-500')
   const mood = moodBtn?.dataset?.mood || 'neutral'
-
-  console.log('Saving planner:', { date, target, notes, mood, priority: 'medium' })
 
   btn.disabled = true
   btn.innerHTML = 'Menyimpan...'
@@ -373,18 +780,15 @@ async function savePlanner(container) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Not authenticated')
 
-    // PASTIKAN data sesuai
     const payload = {
       user_id: user.id,
       note_date: date,
       target: target,
       notes: notes,
-      mood: mood,           // ⬅️ mood ke kolom mood
-      priority: 'medium',   // ⬅️ priority tetap medium
+      mood: mood,
+      priority: 'medium',
       updated_at: new Date().toISOString(),
     }
-
-    console.log('Payload:', payload)
 
     const { error } = await supabase
       .from('daily_notes')
@@ -392,10 +796,7 @@ async function savePlanner(container) {
         onConflict: 'user_id, note_date'
       })
 
-    if (error) {
-      console.error('Upsert error:', error)
-      throw error
-    }
+    if (error) throw error
 
     Toast.success('Planner berhasil disimpan! 📝')
   } catch (error) {
@@ -412,6 +813,10 @@ async function savePlanner(container) {
   }
 }
 
+// ============================================================
+// Show Agenda Form
+// ============================================================
+
 async function showAgendaForm(container) {
   const { Modal } = await import('@components/ui/modal.js')
   const date = container.dataset.currentDate || new Date().toISOString().split('T')[0]
@@ -426,7 +831,7 @@ async function showAgendaForm(container) {
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
             Judul Agenda <span class="text-red-500">*</span>
           </label>
-          <input type="text" id="agenda-title" class="input" placeholder="Apa yang harus dilakukan?" required />
+          <input type="text" id="agenda-title" class="input" placeholder="Apa yang harus dilakukan?" required autofocus />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Deskripsi</label>
@@ -443,9 +848,14 @@ async function showAgendaForm(container) {
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Jam</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Jam <span class="text-green-500 text-xs">(Akan diingatkan)</span>
+            </label>
             <input type="time" id="agenda-time" class="input" />
           </div>
+        </div>
+        <div class="text-xs text-gray-400 dark:text-gray-500">
+          ⏰ Jika jam diisi, Anda akan mendapatkan notifikasi saat waktunya tiba
         </div>
       </form>
     `,
@@ -462,7 +872,7 @@ async function showAgendaForm(container) {
 
       const { data: { user } } = await supabase.auth.getUser()
 
-      await supabase.from('todos').insert({
+      const { error } = await supabase.from('todos').insert({
         user_id: user.id,
         title,
         description,
@@ -472,8 +882,122 @@ async function showAgendaForm(container) {
         status: 'pending',
       })
 
-      Toast.success('Agenda berhasil ditambahkan!')
+      if (error) throw error
+
+      if (dueTime) {
+        Toast.success(`Agenda ditambahkan! ⏰ Akan diingatkan pada ${dueTime}`)
+      } else {
+        Toast.success('Agenda berhasil ditambahkan!')
+      }
+      
       loadPlannerData(container, date)
     },
   })
 }
+
+// ============================================================
+// Show Edit Agenda Form
+// ============================================================
+
+async function showEditAgendaForm(container, todoId) {
+  const { Modal } = await import('@components/ui/modal.js')
+  const date = container.dataset.currentDate || new Date().toISOString().split('T')[0]
+
+  // Get todo data
+  const { data: todo, error } = await supabase
+    .from('todos')
+    .select('*')
+    .eq('id', todoId)
+    .single()
+
+  if (error || !todo) {
+    Toast.error('Data agenda tidak ditemukan')
+    return
+  }
+
+  Modal.show({
+    title: 'Edit Agenda',
+    size: 'md',
+    confirmText: 'Update',
+    content: `
+      <form id="agenda-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            Judul Agenda <span class="text-red-500">*</span>
+          </label>
+          <input type="text" id="agenda-title" class="input" value="${todo.title}" required autofocus />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Deskripsi</label>
+          <textarea id="agenda-desc" class="input min-h-[60px]" rows="2">${todo.description || ''}</textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Prioritas</label>
+            <select id="agenda-priority" class="input">
+              <option value="low" ${todo.priority === 'low' ? 'selected' : ''}>Rendah</option>
+              <option value="medium" ${todo.priority === 'medium' ? 'selected' : ''}>Sedang</option>
+              <option value="high" ${todo.priority === 'high' ? 'selected' : ''}>Tinggi</option>
+              <option value="urgent" ${todo.priority === 'urgent' ? 'selected' : ''}>Penting!</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Jam <span class="text-green-500 text-xs">(Akan diingatkan)</span>
+            </label>
+            <input type="time" id="agenda-time" class="input" value="${todo.due_time || ''}" />
+          </div>
+        </div>
+        <div class="text-xs text-gray-400 dark:text-gray-500">
+          ⏰ Jika jam diisi, Anda akan mendapatkan notifikasi saat waktunya tiba
+        </div>
+      </form>
+    `,
+    onConfirm: async () => {
+      const title = document.querySelector('#agenda-title')?.value?.trim()
+      const description = document.querySelector('#agenda-desc')?.value?.trim()
+      const priority = document.querySelector('#agenda-priority')?.value
+      const dueTime = document.querySelector('#agenda-time')?.value
+
+      if (!title) {
+        Toast.warning('Judul agenda wajib diisi')
+        throw new Error('Validation failed')
+      }
+
+      const { error } = await supabase
+        .from('todos')
+        .update({
+          title,
+          description,
+          priority,
+          due_time: dueTime || null,
+        })
+        .eq('id', todoId)
+
+      if (error) throw error
+
+      Toast.success('Agenda berhasil diupdate!')
+      loadPlannerData(container, date)
+    },
+  })
+}
+
+// ============================================================
+// Cleanup on page leave
+// ============================================================
+
+// Stop reminder checker when page is unloaded
+window.addEventListener('beforeunload', () => {
+  ReminderChecker.stop()
+})
+
+// Start reminder checker when page loads (if user logged in)
+document.addEventListener('DOMContentLoaded', async () => {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
+    ReminderChecker.start()
+  }
+})
+
+// Export ReminderChecker untuk debugging
+window.__reminder = ReminderChecker
